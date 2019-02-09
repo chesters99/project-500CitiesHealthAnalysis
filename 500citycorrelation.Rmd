@@ -1,0 +1,103 @@
+---
+title: "500citycorrelations"
+author: "Nicolas Maire, nmaire2"
+date: "4/24/2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+##Intro
+
+This is an attempt at a more detailed analysis of the interrelationships between preventive measures, unhealthy behaviours, and health outcomes reported in the 500 city data set. The data is filtered and transformed in different ways to make it easier to understand patterns.
+
+##Correlation matrices
+```{r, results='asis'}
+library(tidyr)
+library(knitr)
+```
+
+create wide data sets separately for risky factors (unhealthy behaviour, prevention), health oucomes, or all
+```{r}
+create_tables<-function(data){
+  data_all <- data[, c(9, 13, 25)]
+  data_by_categ <- data[, c(7, 9, 13, 25)]
+  prevention <- data_by_categ[data_by_categ$Category=='Prevention', c(2, 3, 4)]
+  unhealthy_behaviours <- data_by_categ[data_by_categ$Category=='Unhealthy Behaviors', c(2, 3, 4)]
+  risk_factors <- rbind(prevention, unhealthy_behaviours)
+  outcomes <- data_by_categ[data_by_categ$Category=='Health Outcomes', c(2, 3, 4)]
+  wide_data_all <- spread(data_all, key = Measure, value = Data_Value)
+  wide_risk_factors <- spread(risk_factors, key = Measure, value = Data_Value)
+  wide_unhealthy <- spread(unhealthy_behaviours, key = Measure, value = Data_Value)
+  wide_prevention <- spread(prevention, key = Measure, value = Data_Value)
+  wide_outcomes <- spread(outcomes, key = Measure, value = Data_Value)
+  wide_risk_factors$City_State <- NULL
+  wide_unhealthy$City_State <- NULL
+  wide_prevention$City_State <- NULL
+  wide_outcomes$City_State <- NULL
+  wide_data_all$City_State <- NULL
+  wide_data_all$Category <- NULL
+  list(wide_data_all, wide_risk_factors, wide_unhealthy, wide_prevention, wide_outcomes)
+}
+```
+
+Read data
+```{r}
+data <- read.csv("500_Cities.csv")
+data <- data[data$GeographicLevel=='City', ]
+#data <- data[data$Data_Value_Type=='Age-adjusted prevalence', ]
+data <- data[data$Data_Value_Type=='Crude prevalence', ]
+dim(data)
+#data <- head(data, n=8000)
+kable(unique(data$Measure), caption = "Full name measures")
+data$City_State <- paste(data$CityName, data$StateAbbr, sep = "_")
+data$Measure <- substr(data$Measure, 1, 32)
+```
+
+Create matrices for unmodified data set
+```{r}
+tables<-create_tables(data)
+kable(round(cor(tables[[1]]), 2), caption = "Table 1. All data")
+kable(round(cor(tables[[2]]), 2), caption = "Table 2. Prevention and unhealthy behaviour")
+kable(round(cor(tables[[3]]), 2), caption = "Table 3. Unhealthy behaviour")
+kable(round(cor(tables[[4]]), 2), caption = "Table 4. Prevention")
+kable(round(cor(tables[[5]]), 2), caption = "Table 5. Health outcomes")
+```
+
+These correlations are difficult to interpret, for several reasons. One is that some of the suspected predictors of the reported health outcomes in the data are coded in a way the would lead to an expected positive correlations measures are reported in different (all unhealthy behaviours as well as health insurance status), whereas most preventive measures are in principle expected to be negatively correlated with health outcomes. To get an table which is easier to interpret, we inverted some prevalences to make all measures negative (increased health risk), so that the sign of a correlation always has the same meaning for all predictors (but note that the labels remain unchanged for now).
+
+```{r}
+data$Data_Value <- ifelse(data$Measure=="Taking medicine for high blood p", 1-data$Data_Value, data$Data_Value)
+data$Data_Value <- ifelse(data$Measure=="Visits to doctor for routine che", 1-data$Data_Value, data$Data_Value)
+data$Data_Value <- ifelse(data$Measure=="Cholesterol screening among adul", 1-data$Data_Value, data$Data_Value)
+data$Data_Value <- ifelse(data$Measure=="Fecal occult blood test, sigmoid", 1-data$Data_Value, data$Data_Value)
+data$Data_Value <- ifelse(data$Measure=="Older adult men aged >=65 Years ", 1-data$Data_Value, data$Data_Value)
+data$Data_Value <- ifelse(data$Measure=="Older adult women aged >=65 Year", 1-data$Data_Value, data$Data_Value)
+data$Data_Value <- ifelse(data$Measure=="Visits to dentist or dental clin", 1-data$Data_Value, data$Data_Value)
+data$Data_Value <- ifelse(data$Measure=="Mammography use among women aged", 1-data$Data_Value, data$Data_Value)
+data$Data_Value <- ifelse(data$Measure=="Papanicolaou smear use among adu", 1-data$Data_Value, data$Data_Value)
+```
+
+Create matrices for data set with some inverted values
+```{r}
+tables<-create_tables(data)
+kable(round(cor(tables[[1]]), 2), caption = "Table 6. All data")
+kable(round(cor(tables[[2]]), 2), caption = "Table 7. Prevention and unhealthy behaviour")
+kable(round(cor(tables[[3]]), 2), caption = "Table 8. Unhealthy behaviour")
+kable(round(cor(tables[[4]]), 2), caption = "Table 9. Prevention")
+kable(round(cor(tables[[5]]), 2), caption = "Table 10. Health outcomes")
+```
+
+##Findings and interpretation
+
+The correlations between different measures which are reported in the data is largely consistent with expectation.
+
+For almost all pairs of unhealthy behaviors and preventive measures (combined as "risk factors" in the analysis), the sign of the correlation is positive after applying the inversion transformation described above (Table 7). A notable exception is binge drinking, which is negatively correlated with almost any other measure in this category. A possible explanation is that binge drinking is most prevalent in college students (https://www.niaaa.nih.gov/alcohol-health/overview-alcohol-consumption/alcohol-facts-and-statistics), wich represent a socio-economic stratum which is otherwise more likely to avoid health risks.
+
+The same is largely true for health outcomes among themselves, where the only health problem which shows only small positive or even slightly negative correlations with other health outcomes is cancer. 
+
+An analysis of the relationship between risk factor variables and health outcomes is much more problematic than the analysis within each of these two categories. The correlation-structure is in many places hard to reconcile with well-established bio-medical facts: for example, there is no clear relationship between smoking and cancer apperent in the data. It is not supprising that the nature of the data doesn't capture the causal relationships in many cases: one obvious shortcoming is both risk factors and health outcomes are measured instantanously, when in reality there is a substantial delay expected before health consequences manifest.
+
+In summary, the data set largely confirms that health inequities affect different health practices and outcomes in similar ways, but also provides some interesting exceptions that would be worth exploring further.
